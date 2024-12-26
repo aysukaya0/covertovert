@@ -1,17 +1,17 @@
 {
-  "covert_channel_code": "Replace it with the [Code] of chosen covert channel type seen in ODTUClass.",
+  "covert_channel_code": "CSC-PSV-TCP-RST",
   "send": {
     "parameters": {
-      "parameter1": "p1",
-      "parameter2": 1234,
-      "log_file_name": "Example_UDPTimingInterarrivalChannelSender.log"
+      "log_file_name": "Example_UDPTimingInterarrivalChannelSender.log",
+      "base_seq": 1000,
+      "timing_variance": 50
     }
   },
   "receive": {
     "parameters": {
-      "parameter1": "p1",
-      "parameter2": 1234,
-      "parameter3": "p3",
+      "base_seq": 1000,
+      "timing_threshold": 100,
+      "buffer_size": 1024,
       "log_file_name": "Example_UDPTimingInterarrivalChannelReceiver.log"
     }
   }
