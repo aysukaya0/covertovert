@@ -4,149 +4,116 @@ import time
 import random
 
 class MyCovertChannel(CovertChannelBase):
-    """
-    Implementation of a covert channel using TCP RST flag manipulation.
-    This channel encodes information by manipulating the RST flag in TCP packets,
-    using two's complement encoding for added stealth and reliability.
-    """
-    
     def _init_(self):
-        """Initialize the covert channel with base configuration."""
         super()._init_()
 
-    def two_complement(self, binary_str):
-        """
-        Calculate two's complement of a 4-bit binary string.
-        For example: "0101" -> "1011" (flip bits and add 1)
-        """
-        num = (int(binary_str, 2) + 1) & 0b1111
-        result = ~num & 0b1111
-        return format(result, '04b')
+    def two_complement(self, binary_str, bit_mask, base, bit_format,inc):
+        num = (int(binary_str, base) + inc) & bit_mask
+        result = ~num & bit_mask
+        return format(result, bit_format)
 
-    def reverse_two_complement(self, binary_str):
-        """
-        Reverse the two's complement encoding to get original bits.
-        For example: "1011" -> "0101"
-        """
-        num = ~(int(binary_str, 2)) & 0b1111
-        result = (num - 1) & 0b1111
-        return format(result, '04b')
+    def reverse_two_complement(self, binary_str, bit_mask, base, bit_format,inc_dec):
+        num = ~(int(binary_str, base)) & bit_mask
+        result = (num - inc_dec) & bit_mask
+        return format(result, bit_format)
 
-    def create_encoded_packet(self, seq_num, bits):
-        """
-        Creates TCP packets for a 4-bit group with proper encoding.
-        
-        Args:
-            seq_num (int): Base sequence number for this group
-            bits (str): 4-bit binary string to encode
-            
-        Returns:
-            list: List of 4 TCP packets with encoded flags
-        """
+    def create_encoded_packet(self, seq_num, bits, src_ip, dst_ip, src_port, dst_port, 
+                            rst_flag, empty_flag, bit_mask, base, bit_format,inc):
         packets = []
-        
-        encoded_bits = self.two_complement(bits)
+        encoded_bits = self.two_complement(bits, bit_mask, base, bit_format,inc)
         
         for idx, bit in enumerate(encoded_bits):
             packet_seq = seq_num + idx
-            
-            packet = IP(src="172.18.0.2", dst="172.18.0.3")/TCP(
-                sport=8000,
-                dport=8000,
+            packet = IP(src=src_ip, dst=dst_ip)/TCP(
+                sport=src_port,
+                dport=dst_port,
                 seq=packet_seq
             )
             
             if int(bit):
-                packet[TCP].flags = "R"  
+                packet[TCP].flags = rst_flag
             else:
-                packet[TCP].flags = ""  
+                packet[TCP].flags = empty_flag
             
             packets.append(packet)
             
         return packets
 
-    def send(self, log_file_name, base_seq, timing_variance):
-        """
-        Sends the complete binary message as encoded TCP packets.
-        """
+    def send(self, log_file_name, base_seq, timing_variance, src_ip, dst_ip, src_port, 
+             dst_port, rst_flag, empty_flag, bit_group_size, bit_mask, base, min_delay,
+             bit_format,inc):
         binary_message = self.generate_random_binary_message_with_logging(log_file_name)     
         current_seq = base_seq
         message_length = len(binary_message)
 
         start_time = time.time()
-        for i in range(0, len(binary_message), 4):
-            four_bits = binary_message[i:i+4]
+        for i in range(0, len(binary_message), bit_group_size):
+            bit_group = binary_message[i:i+bit_group_size]
             
-            packets = self.create_encoded_packet(current_seq, four_bits)
+            packets = self.create_encoded_packet(current_seq, bit_group, src_ip, dst_ip, 
+                                              src_port, dst_port, rst_flag, empty_flag, 
+                                              bit_mask, base, bit_format,inc)
             for packet in packets:
                 super().send(packet)
-                self.sleep_random_time_ms(1, timing_variance)
+                self.sleep_random_time_ms(min_delay, timing_variance)
             
-            current_seq += 4
+            current_seq += bit_group_size
 
         end_time = time.time()
-        
-
         transmission_time = end_time - start_time
-        channel_capacity = 128/transmission_time
-        
-        # # Print results
-        # print(f"Message length: {message_length} bits")
-        # print(f"Transmission time: {transmission_time:.2f} seconds")
-        # print(f"Channel capacity: {channel_capacity:.2f} bits per second")
+        channel_capacity = message_length/transmission_time
 
-    def receive(self, base_seq, timing_threshold, buffer_size, log_file_name):
-        """
-        Receives and decodes the covert channel message.
-        """
-        received_bits = []           
-        current_group = [''] * 4     
-        group_packets_received = 0   
+    def receive(self, base_seq, timing_threshold, buffer_size, log_file_name, dst_port, 
+                bit_group_size, bit_mask, base, char_size, rst_mask, stop_char,
+                empty_str, bit_format, initial_stop, initial_message, initial_bits,
+                filter_template, store_val,init_group_packets,rst_reset,rst_set,inc_dec):
+        received_bits = initial_bits.copy()           
+        current_group = [empty_str] * bit_group_size     
+        group_packets_received = init_group_packets   
         current_group_base = base_seq  
-        message = ""                
-        stop_found = False 
+        message = initial_message                
+        stop_found = initial_stop 
         
         def packet_callback(packet):
-            """Process each received packet."""
             nonlocal received_bits, current_group, group_packets_received
             nonlocal current_group_base, message, stop_found
             
             if stop_found:
                 return True
             
-            if packet.haslayer(TCP) and packet[TCP].dport == 8000:
+            if packet.haslayer(TCP) and packet[TCP].dport == dst_port:
                 seq = packet[TCP].seq
                 offset = seq - current_group_base
                 
-                if 0 <= offset < 4 and current_group[offset] == '':
-                    rst_flag = '1' if packet[TCP].flags & 0x04 else '0'
+                if 0 <= offset < bit_group_size and current_group[offset] == empty_str:
+                    rst_flag = rst_set if packet[TCP].flags & rst_mask else rst_reset
                     current_group[offset] = rst_flag
-                    group_packets_received += 1
+                    group_packets_received += inc_dec
 
-                    if group_packets_received == 4:
-                        group_bits = ''.join(current_group)
-                        decoded_bits = self.reverse_two_complement(group_bits)
+                    if group_packets_received == bit_group_size:
+                        group_bits = empty_str.join(current_group)
+                        decoded_bits = self.reverse_two_complement(group_bits, bit_mask, base, bit_format,inc_dec)
                         received_bits.extend(decoded_bits)
                         
-                        while len(received_bits) >= 8:
-                            char_bits = ''.join(received_bits[:8])
-                            received_bits = received_bits[8:]
+                        while len(received_bits) >= char_size:
+                            char_bits = empty_str.join(received_bits[:char_size])
+                            received_bits = received_bits[char_size:]
                             char = self.convert_eight_bits_to_character(char_bits)
                             
                             message += char
-                            if char == '.':
+                            if char == stop_char:
                                 self.log_message(message, log_file_name)
                                 stop_found = True
                                 return True
                         
-                        current_group = [''] * 4
-                        group_packets_received = 0
-                        current_group_base += 4
+                        current_group = [empty_str] * bit_group_size
+                        group_packets_received = init_group_packets
+                        current_group_base += bit_group_size
             
             return False
         
+        filter_str = filter_template.format(port=dst_port)
         sniff(prn=packet_callback,
               stop_filter=packet_callback,
-              filter="tcp and port 8000",
-              store=0)
-        
+              filter=filter_str,
+              store=store_val)

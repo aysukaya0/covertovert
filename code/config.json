@@ -1,18 +1,49 @@
 {
-  "covert_channel_code": "CSC-PSV-TCP-RST",
-  "send": {
-    "parameters": {
-      "log_file_name": "Example_UDPTimingInterarrivalChannelSender.log",
-      "base_seq": 1000,
-      "timing_variance": 50
+    "covert_channel_code": "CSC-PSV-TCP-RST",
+    "send": {
+        "parameters": {
+            "log_file_name": "sender.log",
+            "base_seq": 1000,
+            "timing_variance": 50,
+            "src_ip": "172.18.0.2",
+            "dst_ip": "172.18.0.3",
+            "src_port": 8000,
+            "dst_port": 8000,
+            "rst_flag": "R",
+            "empty_flag": "",
+            "bit_group_size": 4,
+            "bit_mask": 15,
+            "base": 2,
+            "min_delay": 1,
+            "bit_format": "04b",
+            "inc": 1
+        }
+    },
+    "receive": {
+        "parameters": {
+            "base_seq": 1000,
+            "timing_threshold": 100,
+            "buffer_size": 1024,
+            "log_file_name": "receiver.log",
+            "dst_port": 8000,
+            "bit_group_size": 4,
+            "bit_mask": 15,
+            "base": 2,
+            "char_size": 8,
+            "rst_mask": 4,
+            "stop_char": ".",
+            "empty_str": "",
+            "bit_format": "04b",
+            "initial_stop": false,
+            "initial_message": "",
+            "initial_bits": [],
+            "filter_template": "tcp and port {port}",
+            "store_val": 0,
+            "init_group_packets": 0,
+            "rst_reset": "0",
+            "rst_set": "1",
+            "inc_dec": 1
+            
+        }
     }
-  },
-  "receive": {
-    "parameters": {
-      "base_seq": 1000,
-      "timing_threshold": 100,
-      "buffer_size": 1024,
-      "log_file_name": "Example_UDPTimingInterarrivalChannelReceiver.log"
-    }
-  }
 }
